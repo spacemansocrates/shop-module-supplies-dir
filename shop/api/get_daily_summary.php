@@ -104,8 +104,8 @@ if ($stock_data) {
     $quantity_sold = (int)$stock_data['quantity_sold'];
     $quantity_adjusted = (int)$stock_data['quantity_adjusted'];
 
-    $stock_data['opening_quantity'] = $closing_quantity - ($quantity_added - $quantity_sold - $quantity_adjusted);
-    $stock_data['total_moved'] = $quantity_added + $quantity_sold + $quantity_adjusted;
+    $stock_data['opening_quantity'] = $closing_quantity - $quantity_added + $quantity_sold - $quantity_adjusted;
+    $stock_data['total_moved'] = $quantity_added + $quantity_sold + abs($quantity_adjusted);
     $response['stock_summary'] = $stock_data;
 } else {
         $response['stock_summary'] = ['opening_quantity' => 0, 'quantity_sold' => 0, 'quantity_added' => 0, 'quantity_adjusted' => 0, 'closing_quantity' => 0, 'total_moved' => 0];
