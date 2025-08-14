@@ -16,10 +16,14 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['shop_id'])) {
 }
 
 // --- DB Connection ---
-$host = 'srv582.hstgr.io'; $dbname = 'u789944046_suppliesdirect'; $user = 'u789944046_socrates'; $pass = 'Naho1386'; $charset = 'utf8mb4';
-$dsn = "mysql:host=$host;dbname=$dbname;charset=$charset";
-$options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC];
-try { $pdo = new PDO($dsn, $user, $pass, $options); } catch (\PDOException $e) { http_response_code(500); echo json_encode(['error' => 'Database error.']); exit(); }
+require_once __DIR__ . '/../config.php';
+try {
+    $pdo = getPDO();
+} catch (PDOException $e) {
+    http_response_code(500);
+    echo json_encode(['error' => 'Database error.']);
+    exit();
+}
 
 // --- Get Data and Session Info ---
 $shop_id = $_SESSION['shop_id'];

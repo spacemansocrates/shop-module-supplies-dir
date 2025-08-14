@@ -35,9 +35,9 @@ if (empty($admin_username) || empty($admin_password) || empty($date)) {
 }
 
 // --- 2. Database Connection ---
-$host = 'srv582.hstgr.io'; $user = 'u789944046_socrates'; $pass = 'Naho1386'; $name = 'u789944046_suppliesdirect';
+require_once __DIR__ . '/../config.php';
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$name;charset=utf8mb4", $user, $pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    $pdo = getPDO();
 } catch (PDOException $e) {
     http_response_code(500);
     echo json_encode(['error' => 'Database connection failed.']);

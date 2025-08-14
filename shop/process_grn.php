@@ -20,10 +20,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // --- DB Connection ---
-$host = 'srv582.hstgr.io'; $dbname = 'u789944046_suppliesdirect'; $user = 'u789944046_socrates'; $pass = 'Naho1386'; $charset = 'utf8mb4';
-$dsn = "mysql:host=$host;dbname=$dbname;charset=$charset";
-$options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_EMULATE_PREPARES => false];
-try { $pdo = new PDO($dsn, $user, $pass, $options); } catch (\PDOException $e) { die("Database connection failed: " . $e->getMessage()); }
+require_once __DIR__ . '/config.php';
+try {
+    $pdo = getPDO();
+} catch (PDOException $e) {
+    die("Database connection failed: " . $e->getMessage());
+}
 
 
 // 2. --- DATA EXTRACTION AND VALIDATION ---
