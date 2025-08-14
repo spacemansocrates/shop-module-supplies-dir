@@ -66,47 +66,31 @@ if (!$reconciliation_data) {
 $stock_summary_sql = "";
 $params = ['shop_id' => $shop_id, 'date' => $date];
 
-// Subquery to get previous day's closing quantity
-$prev_day_closing_subquery = "
-    SELECT dss_prev.closing_quantity
-    FROM daily_stock_summary dss_prev
-    JOIN daily_reconciliation dr_prev ON dss_prev.daily_reconciliation_id = dr_prev.id
-    WHERE dr_prev.shop_id = :shop_id_prev AND dr_prev.reconciliation_date = DATE_SUB(:date_prev, INTERVAL 1 DAY) AND dss_prev.product_id = p.id
-";
-
 if ($product_id) {
     $stock_summary_sql = "
         SELECT 
-            COALESCE((" . $prev_day_closing_subquery . "), 0) as opening_quantity,
             COALESCE(dss.quantity_sold, 0) as quantity_sold,
             COALESCE(dss.quantity_added, 0) as quantity_added,
             COALESCE(dss.quantity_adjusted, 0) as quantity_adjusted,
             ss.quantity_in_stock as closing_quantity
         FROM shop_stock ss
-        JOIN products p ON ss.product_id = p.id
         LEFT JOIN daily_reconciliation dr ON dr.shop_id = ss.shop_id AND dr.reconciliation_date = :date
         LEFT JOIN daily_stock_summary dss ON dss.daily_reconciliation_id = dr.id AND dss.product_id = ss.product_id
         WHERE ss.shop_id = :shop_id AND ss.product_id = :product_id
     ";
     $params['product_id'] = $product_id;
-    $params['shop_id_prev'] = $shop_id;
-    $params['date_prev'] = $date;
 } else {
     $stock_summary_sql = "
         SELECT 
-            SUM(COALESCE((" . $prev_day_closing_subquery . "), 0)) as opening_quantity,
             SUM(COALESCE(dss.quantity_sold, 0)) as quantity_sold,
             SUM(COALESCE(dss.quantity_added, 0)) as quantity_added,
             SUM(COALESCE(dss.quantity_adjusted, 0)) as quantity_adjusted,
             SUM(ss.quantity_in_stock) as closing_quantity
         FROM shop_stock ss
-        JOIN products p ON ss.product_id = p.id
         LEFT JOIN daily_reconciliation dr ON dr.shop_id = ss.shop_id AND dr.reconciliation_date = :date
         LEFT JOIN daily_stock_summary dss ON dss.daily_reconciliation_id = dr.id AND dss.product_id = ss.product_id
         WHERE ss.shop_id = :shop_id
     ";
-    $params['shop_id_prev'] = $shop_id;
-    $params['date_prev'] = $date;
 }
 
 $stmt_stock = $pdo->prepare($stock_summary_sql);
@@ -114,7 +98,14 @@ $stmt_stock->execute($params);
 $stock_data = $stmt_stock->fetch();
 
 if ($stock_data) {
-    $stock_data['total_moved'] = (int)$stock_data['quantity_added'] + (int)$stock_data['quantity_sold'] + (int)$stock_data['quantity_adjusted'];
+    // Calculate opening_quantity based on current closing_quantity and movements
+    $closing_quantity = (int)$stock_data['closing_quantity'];
+    $quantity_added = (int)$stock_data['quantity_added'];
+    $quantity_sold = (int)$stock_data['quantity_sold'];
+    $quantity_adjusted = (int)$stock_data['quantity_adjusted'];
+
+    $stock_data['opening_quantity'] = $closing_quantity - ($quantity_added - $quantity_sold - $quantity_adjusted);
+    $stock_data['total_moved'] = $quantity_added + $quantity_sold + $quantity_adjusted;
     $response['stock_summary'] = $stock_data;
 } else {
     $response['stock_summary'] = ['opening_quantity' => 0, 'quantity_sold' => 0, 'quantity_added' => 0, 'quantity_adjusted' => 0, 'closing_quantity' => 0, 'total_moved' => 0];
