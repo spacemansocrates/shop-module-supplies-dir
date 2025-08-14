@@ -72,7 +72,7 @@ if ($product_id) {
             COALESCE(dss.quantity_sold, 0) as quantity_sold,
             COALESCE(dss.quantity_added, 0) as quantity_added,
             COALESCE(dss.quantity_adjusted, 0) as quantity_adjusted,
-            ss.quantity_in_stock as closing_quantity
+            COALESCE(dss.closing_quantity, ss.quantity_in_stock) as closing_quantity
         FROM shop_stock ss
         LEFT JOIN daily_reconciliation dr ON dr.shop_id = ss.shop_id AND dr.reconciliation_date = :date
         LEFT JOIN daily_stock_summary dss ON dss.daily_reconciliation_id = dr.id AND dss.product_id = ss.product_id
@@ -85,7 +85,7 @@ if ($product_id) {
             SUM(COALESCE(dss.quantity_sold, 0)) as quantity_sold,
             SUM(COALESCE(dss.quantity_added, 0)) as quantity_added,
             SUM(COALESCE(dss.quantity_adjusted, 0)) as quantity_adjusted,
-            SUM(ss.quantity_in_stock) as closing_quantity
+            SUM(COALESCE(dss.closing_quantity, ss.quantity_in_stock)) as closing_quantity
         FROM shop_stock ss
         LEFT JOIN daily_reconciliation dr ON dr.shop_id = ss.shop_id AND dr.reconciliation_date = :date
         LEFT JOIN daily_stock_summary dss ON dss.daily_reconciliation_id = dr.id AND dss.product_id = ss.product_id
@@ -108,7 +108,29 @@ if ($stock_data) {
     $stock_data['total_moved'] = $quantity_added + $quantity_sold + $quantity_adjusted;
     $response['stock_summary'] = $stock_data;
 } else {
-    $response['stock_summary'] = ['opening_quantity' => 0, 'quantity_sold' => 0, 'quantity_added' => 0, 'quantity_adjusted' => 0, 'closing_quantity' => 0, 'total_moved' => 0];
+        $response['stock_summary'] = ['opening_quantity' => 0, 'quantity_sold' => 0, 'quantity_added' => 0, 'quantity_adjusted' => 0, 'closing_quantity' => 0, 'total_moved' => 0];
 }
+
+// --- Part 3: Fetch Transaction List for the table at the bottom ---
+$sql_transactions = "
+    (
+        SELECT p.payment_date AS transaction_date, 'Payment Received' AS transaction_type, CONCAT('Inv #', i.invoice_number) AS category, p.amount_paid AS amount, c.name AS customer_name
+        FROM payments p
+        JOIN invoices i ON p.invoice_id = i.id
+        JOIN customers c ON p.customer_id = c.id
+        WHERE i.shop_id = ? AND p.payment_date = ?
+    )
+    UNION ALL
+    (
+        SELECT pct.transaction_date, 'Petty Cash Expense', pct.category, pct.amount, pct.description
+        FROM petty_cash_transactions pct
+        JOIN petty_cash_floats pcf ON pct.float_id = pcf.id
+        WHERE pcf.shop_id = ? AND DATE(pct.transaction_date) = ? AND pct.transaction_type = 'expense'
+    )
+    ORDER BY transaction_date DESC
+";
+$stmt_list = $pdo->prepare($sql_transactions);
+$stmt_list->execute([$shop_id, $date, $shop_id, $date]);
+$response['transaction_list'] = $stmt_list->fetchAll();
 
 echo json_encode($response);

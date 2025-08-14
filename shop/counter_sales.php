@@ -94,7 +94,7 @@ $current_page = 'counter_sales';
                     <div class="card-body"><h2>MWK <span id="closing-balance">...</span></h2></div>
                 </div>
                 <div class="card"><div class="card-header"><h3>Stock Opening</h3></div><select id="product-search" style="width: 100%;"></select><div class="card-body" style="margin-top: 10px;"><h2><span id="stock-opening">--</span> <small>PCS</small></h2></div></div>
-                <div class="card"><div class="card-header"><h3>Total Moved</h3></div><div class="card-body"><h2><span id="stock-total-moved">--</span> <small>PCS</small></h2></div><div class="sub-stats"><span class="stock-added">+<span id="stock-added">--</span></span><span class="stock-sold">-<span id="stock-sold">--</span></span><span class="stock-adjusted">-<span id="stock-adjusted">--</span></span></div></div>
+                <div class="card" id="stock-total-moved-card"><div class="card-header"><h3>Total Moved</h3></div><div class="card-body"><h2><span id="stock-total-moved">--</span> <small>PCS</small></h2></div><div class="sub-stats"><span class="stock-added">+<span id="stock-added">--</span></span><span class="stock-sold">-<span id="stock-sold">--</span></span><span class="stock-adjusted">-<span id="stock-adjusted">--</span></span></div></div>
                 <div class="card"><div class="card-header"><h3>Stock Closing</h3></div><div class="card-body"><h2><span id="stock-closing">--</span> <small>PCS</small></h2></div></div>
             </section>
             
@@ -197,6 +197,34 @@ $current_page = 'counter_sales';
             } else {
                 stockSpans.forEach(span => span.textContent = '--');
             }
+
+            // Populate daily transaction log
+            populateTransactionsTable(data.transaction_list);
+        }
+
+        function populateTransactionsTable(transactions) {
+            const tbody = document.getElementById('transactions-tbody');
+            tbody.innerHTML = ''; // Clear existing rows
+
+            if (!transactions || transactions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No transactions for this date.</td></tr>';
+                return;
+            }
+
+            transactions.forEach(tx => {
+                const row = document.createElement('tr');
+                const transactionTime = new Date(tx.transaction_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const amountClass = parseFloat(tx.amount) >= 0 ? 'cash-in' : 'cash-out';
+
+                row.innerHTML = `
+                    <td>${transactionTime}</td>
+                    <td>${tx.transaction_type}</td>
+                    <td>${tx.category}</td>
+                    <td class="${amountClass}">${formatCurrency(tx.amount)}</td>
+                    <td>${tx.customer_name || tx.description || 'N/A'}</td>
+                `;
+                tbody.appendChild(row);
+            });
         }
         
         // --- EVENT LISTENERS ---
@@ -223,6 +251,57 @@ $current_page = 'counter_sales';
             } catch (error) { ui.detailModalTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: red;">${error.message}</td></tr>`; }
         });
         function populateDetailModal(transactions) { /* ... same as before ... */ ui.detailModalTbody.innerHTML = ''; if(transactions.length === 0){ui.detailModalTbody.innerHTML = '<tr><td colspan=4>No transactions.</td></tr>'; return;} transactions.forEach(tx => { const time = new Date(tx.transaction_time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); const amount = parseFloat(tx.amount); const amountClass = amount >= 0 ? 'cash-in' : 'cash-out'; const row = `<tr><td>${time}</td><td>${tx.type}</td><td>${tx.details}</td><td class="${amountClass}" style="text-align: right;">${formatCurrency(amount)}</td></tr>`; ui.detailModalTbody.insertAdjacentHTML('beforeend', row); }); }
+
+        // Total Moved Detail Modal Logic
+        document.getElementById('stock-total-moved-card').addEventListener('click', async () => {
+            const selectedProductId = ui.productSearch.val();
+            if (!selectedProductId) {
+                alert("Please select a product to view stock movement details.");
+                return;
+            }
+            ui.detailModalTbody.innerHTML = `<tr><td colspan="4" style="text-align: center;">Loading...</td></tr>`;
+            document.getElementById('detail-modal-title').textContent = 'Stock Movement Details';
+            openModal(ui.detailModal);
+            try {
+                const response = await fetch(`api/get_stock_details.php?date=${ui.dateInput.value}&product_id=${selectedProductId}`);
+                const movements = await response.json();
+                if (!response.ok) throw new Error(movements.error);
+                populateStockDetailModal(movements);
+            } catch (error) {
+                ui.detailModalTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: red;">${error.message}</td></tr>`;
+            }
+        });
+
+        function populateStockDetailModal(movements) {
+            ui.detailModalTbody.innerHTML = '';
+            if (movements.length === 0) {
+                ui.detailModalTbody.innerHTML = '<tr><td colspan=4>No stock movements for this product on this date.</td></tr>';
+                return;
+            }
+            movements.forEach(mv => {
+                const time = new Date(mv.transaction_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                let typeClass = '';
+                let quantitySign = '';
+                if (mv.transaction_type === 'stock_in' || mv.transaction_type === 'return') {
+                    typeClass = 'cash-in';
+                    quantitySign = '+';
+                } else if (mv.transaction_type === 'sale' || mv.transaction_type === 'stock_out') {
+                    typeClass = 'cash-out';
+                    quantitySign = '-';
+                } else if (mv.transaction_type === 'adjustment') {
+                    typeClass = (mv.quantity > 0) ? 'cash-in' : 'cash-out';
+                    quantitySign = (mv.quantity > 0) ? '+' : '';
+                }
+
+                const row = `<tr>
+                    <td>${time}</td>
+                    <td>${mv.transaction_type.replace(/_/g, ' ').toUpperCase()}</td>
+                    <td>${mv.notes || 'N/A'}</td>
+                    <td class="${typeClass}" style="text-align: right;">${quantitySign}${Math.abs(mv.quantity)}</td>
+                </tr>`;
+                ui.detailModalTbody.insertAdjacentHTML('beforeend', row);
+            });
+        }
         
         // --- SELECT2 INITIALIZATION & EVENTS ---
         ui.productSearch.select2({
