@@ -113,16 +113,75 @@ try {
         $stmt_items->bind_param("iisdddi", $invoice_id, $productId, $name, $quantity_decimal, $price, $line_total, $userId);
         $stmt_items->execute();
 
-        // Update the main stock level, ensuring there is enough stock
+        // *** NEW LOGIC PART 2: Update or Insert daily stock summary for this item ***
+        // First, check if a daily_stock_summary record exists for this product and date
+        $stmt_check_dss = $mysqli->prepare(
+            "SELECT dss.id, dss.opening_quantity FROM daily_stock_summary dss
+             JOIN daily_reconciliation dr ON dss.daily_reconciliation_id = dr.id
+             WHERE dr.shop_id = ? AND dr.reconciliation_date = ? AND dss.product_id = ?"
+        );
+        $stmt_check_dss->bind_param("isi", $shopId, $invoice_date, $productId);
+        $stmt_check_dss->execute();
+        $result_check_dss = $stmt_check_dss->get_result();
+        $dss_record = $result_check_dss->fetch_assoc();
+        $stmt_check_dss->close();
+
+        if ($dss_record) {
+            // Record exists, update quantity_sold
+            $stmt_update_dss = $mysqli->prepare(
+                "UPDATE daily_stock_summary SET quantity_sold = quantity_sold + ? WHERE id = ?"
+            );
+            $stmt_update_dss->bind_param("ii", $quantity_integer, $dss_record['id']);
+            $stmt_update_dss->execute();
+            $stmt_update_dss->close();
+        } else {
+            // No record for today, insert a new one
+            // Get previous day's closing quantity for opening_quantity
+            $stmt_prev_day_closing = $mysqli->prepare(
+                "SELECT dss.closing_quantity FROM daily_stock_summary dss
+                 JOIN daily_reconciliation dr ON dss.daily_reconciliation_id = dr.id
+                 WHERE dr.shop_id = ? AND dr.reconciliation_date < ? AND dss.product_id = ?
+                 ORDER BY dr.reconciliation_date DESC LIMIT 1"
+            );
+            $stmt_prev_day_closing->bind_param("isi", $shopId, $invoice_date, $productId);
+            $stmt_prev_day_closing->execute();
+            $prev_day_closing_qty = $stmt_prev_day_closing->get_result()->fetch_column();
+            $stmt_prev_day_closing->close();
+
+            $opening_qty_for_new_dss = $prev_day_closing_qty ?: 0;
+
+            // Get daily_reconciliation_id for today
+            $stmt_get_reconciliation_id = $mysqli->prepare(
+                "SELECT id FROM daily_reconciliation WHERE shop_id = ? AND reconciliation_date = ?"
+            );
+            $stmt_get_reconciliation_id->bind_param("is", $shopId, $invoice_date);
+            $stmt_get_reconciliation_id->execute();
+            $reconciliation_id = $stmt_get_reconciliation_id->get_result()->fetch_column();
+            $stmt_get_reconciliation_id->close();
+
+            if (!$reconciliation_id) {
+                // This should ideally not happen if daily_reconciliation is handled first, but as a fallback
+                throw new Exception("Daily reconciliation record not found for today.");
+            }
+
+            $stmt_insert_dss = $mysqli->prepare(
+                "INSERT INTO daily_stock_summary (daily_reconciliation_id, product_id, opening_quantity, quantity_sold, quantity_added, quantity_adjusted, closing_quantity) 
+                 VALUES (?, ?, ?, ?, 0, 0, ?)"
+            );
+            // For a new record, closing_quantity will be opening_quantity - quantity_sold initially
+            $initial_closing_qty = $opening_qty_for_new_dss - $quantity_integer;
+            $stmt_insert_dss->bind_param("iiiii", $reconciliation_id, $productId, $opening_qty_for_new_dss, $quantity_integer, $initial_closing_qty);
+            $stmt_insert_dss->execute();
+            $stmt_insert_dss->close();
+        }
+
+        // After updating/inserting daily_stock_summary, ensure shop_stock is updated to reflect the current live stock
+        // This part remains the same as it updates the live stock for the product
         $stmt_stock->bind_param("iiii", $quantity_integer, $productId, $shopId, $quantity_integer);
         $stmt_stock->execute();
         if ($stmt_stock->affected_rows === 0) {
             throw new Exception("Insufficient stock for '{$name}'. Sale cannot be completed.");
         }
-
-        // *** NEW LOGIC PART 2: Execute the daily stock summary update for this item ***
-        $stmt_stock_summary->bind_param("iisi", $quantity_integer, $shopId, $invoice_date, $productId);
-        $stmt_stock_summary->execute();
     }
     // Close the prepared statements that were used inside the loop
     $stmt_items->close();

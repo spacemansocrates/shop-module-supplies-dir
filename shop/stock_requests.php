@@ -112,7 +112,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $sql_update_item = "UPDATE stock_transfer_items SET quantity_received = quantity_shipped WHERE stock_transfer_id = ? AND product_id = ?";
                     $stmt_update_item = $pdo->prepare($sql_update_item);
 
-                    // 4. Update shop_stock (quantity_in_stock)
+                    // 4. Update shop_stock (quantity_in_stock) AND daily_stock_summary
                     $sql_update_shop_stock = "
                         INSERT INTO shop_stock (shop_id, product_id, quantity_in_stock)
                         VALUES (?, ?, ?)
@@ -120,10 +120,71 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     ";
                     $stmt_update_shop_stock = $pdo->prepare($sql_update_shop_stock);
 
+                    // Prepare statements for daily_stock_summary
+                    $stmt_check_dss = $pdo->prepare(
+                        "SELECT dss.id, dss.opening_quantity FROM daily_stock_summary dss
+                         JOIN daily_reconciliation dr ON dss.daily_reconciliation_id = dr.id
+                         WHERE dr.shop_id = ? AND dr.reconciliation_date = ? AND dss.product_id = ?"
+                    );
+                    $stmt_update_dss = $pdo->prepare(
+                        "UPDATE daily_stock_summary SET quantity_added = quantity_added + ? WHERE id = ?"
+                    );
+                    $stmt_insert_dss = $pdo->prepare(
+                        "INSERT INTO daily_stock_summary (daily_reconciliation_id, product_id, opening_quantity, quantity_sold, quantity_added, quantity_adjusted, closing_quantity) 
+                         VALUES (?, ?, ?, 0, ?, 0, ?)"
+                    );
+                    $stmt_prev_day_closing = $pdo->prepare(
+                        "SELECT dss.closing_quantity FROM daily_stock_summary dss
+                         JOIN daily_reconciliation dr ON dss.daily_reconciliation_id = dr.id
+                         WHERE dr.shop_id = ? AND dr.reconciliation_date < ? AND dss.product_id = ?
+                         ORDER BY dr.reconciliation_date DESC LIMIT 1"
+                    );
+                    $stmt_get_reconciliation_id = $pdo->prepare(
+                        "SELECT id FROM daily_reconciliation WHERE shop_id = ? AND reconciliation_date = ?"
+                    );
+
                     foreach ($items as $item) {
                         if ($item['quantity_shipped'] > 0) { // Only process items that were actually shipped
-                            $stmt_update_item->execute([$transfer_id, $item['product_id']]);
-                            $stmt_update_shop_stock->execute([$shop_id, $item['product_id'], $item['quantity_shipped']]);
+                            $product_id = $item['product_id'];
+                            $quantity_shipped = $item['quantity_shipped'];
+                            $received_date = date('Y-m-d'); // Use current date for daily_stock_summary
+
+                            // Update shop_stock
+                            $stmt_update_shop_stock->execute([$shop_id, $product_id, $quantity_shipped]);
+
+                            // Update quantity_received in stock_transfer_items
+                            $stmt_update_item->execute([$transfer_id, $product_id]);
+
+                            // Handle daily_stock_summary
+                            $stmt_check_dss->execute([$shop_id, $received_date, $product_id]);
+                            $dss_record = $stmt_check_dss->fetch();
+
+                            if ($dss_record) {
+                                // Record exists, update quantity_added
+                                $stmt_update_dss->execute([$quantity_shipped, $dss_record['id']]);
+                            } else {
+                                // No record for today, insert a new one
+                                // Get previous day's closing quantity for opening_quantity
+                                $stmt_prev_day_closing->execute([$shop_id, $received_date, $product_id]);
+                                $prev_day_closing_qty = $stmt_prev_day_closing->fetchColumn();
+                                $opening_qty_for_new_dss = $prev_day_closing_qty ?: 0;
+
+                                // Get daily_reconciliation_id for today
+                                $stmt_get_reconciliation_id->execute([$shop_id, $received_date]);
+                                $reconciliation_id = $stmt_get_reconciliation_id->fetchColumn();
+
+                                if (!$reconciliation_id) {
+                                    // This should ideally not happen if daily_reconciliation is handled first
+                                    // but as a fallback, create it if missing
+                                    $stmt_insert_reconciliation = $pdo->prepare("INSERT INTO daily_reconciliation (shop_id, reconciliation_date, opening_cash_balance, closing_cash_balance) VALUES (?, ?, '0.00', '0.00')");
+                                    $stmt_insert_reconciliation->execute([$shop_id, $received_date]);
+                                    $reconciliation_id = $pdo->lastInsertId();
+                                }
+
+                                // For a new record, closing_quantity will be opening_quantity + quantity_added initially
+                                $initial_closing_qty = $opening_qty_for_new_dss + $quantity_shipped;
+                                $stmt_insert_dss->execute([$reconciliation_id, $product_id, $opening_qty_for_new_dss, $quantity_shipped, $initial_closing_qty]);
+                            }
                         }
                     }
 
