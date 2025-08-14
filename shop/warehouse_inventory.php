@@ -6,14 +6,12 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['warehouse_id'])) {
 }
 
 // DB Connection...
-$host = 'srv582.hstgr.io';
-$dbname = 'u789944046_suppliesdirect';
-$user = 'u789944046_socrates';
-$pass = 'Naho1386'; 
-$charset = 'utf8mb4';
-$dsn = "mysql:host=$host;dbname=$dbname;charset=$charset";
-$options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_EMULATE_PREPARES => false];
-try { $pdo = new PDO($dsn, $user, $pass, $options); } catch (\PDOException $e) { throw new \PDOException($e->getMessage(), (int)$e->getCode()); }
+require_once __DIR__ . '/config.php';
+try {
+    $pdo = getPDO();
+} catch (PDOException $e) {
+    throw new PDOException($e->getMessage(), (int)$e->getCode());
+}
 
 $user_id = $_SESSION['user_id'];
 $warehouse_id = $_SESSION['warehouse_id'];

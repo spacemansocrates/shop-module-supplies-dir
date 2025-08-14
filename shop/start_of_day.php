@@ -13,10 +13,10 @@ $shopId = (int)$_SESSION['shop_id'];
 $today = date('Y-m-d');
 $yesterday = date('Y-m-d', strtotime('-1 day'));
 
-// DB Connection (Use your live credentials)
-$db_host = 'srv582.hstgr.io'; $db_user = 'u789944046_socrates'; $db_pass = 'Naho1386'; $db_name = 'u789944046_suppliesdirect'; $db_port = 3306;
+// DB Connection
+require_once __DIR__ . '/config.php';
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
-$mysqli = new mysqli($db_host, $db_user, $db_pass, $db_name, $db_port);
+$mysqli = getMySQLi();
 echo "Connected to database successfully.\n";
 
 // --- 2. START THE TRANSACTION ---

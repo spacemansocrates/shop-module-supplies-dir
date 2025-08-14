@@ -6,17 +6,11 @@ header('Content-Type: application/json');
 session_start();
 
 // --- 2. DATABASE CONNECTION ---
-// Make sure these credentials are correct for your environment
-// --- 1. DATABASE CONNECTION ---
-$db_host = 'srv582.hstgr.io';
-$db_user = 'u789944046_socrates';
-$db_pass = 'Naho1386'; // Your password
-$db_name = 'u789944046_suppliesdirect';
-$db_port = 3306;
+require_once __DIR__ . '/config.php';
 
 // Enable error reporting to catch all issues during the transaction
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
-$mysqli = new mysqli($db_host, $db_user, $db_pass, $db_name, $db_port);
+$mysqli = getMySQLi();
 
 // --- 3. GET AND VALIDATE INPUT ---
 $json_data = file_get_contents('php://input');

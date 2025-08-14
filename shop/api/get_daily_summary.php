@@ -22,10 +22,14 @@ if (!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/", $date
 }
 
 // --- DB Connection ---
-$host = 'srv582.hstgr.io'; $user = 'u789944046_socrates'; $pass = 'Naho1386'; $name = 'u789944046_suppliesdirect';
+require_once __DIR__ . '/../config.php';
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$name;charset=utf8mb4", $user, $pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
-} catch (PDOException $e) { /* ... DB error handling ... */ http_response_code(500); echo json_encode(['error' => 'DB Connection Failed.']); exit(); }
+    $pdo = getPDO();
+} catch (PDOException $e) {
+    http_response_code(500);
+    echo json_encode(['error' => 'DB Connection Failed.']);
+    exit();
+}
 
 $response = [
     'financial_summary' => null,
@@ -103,9 +107,11 @@ if ($stock_data) {
     $quantity_added = (int)$stock_data['quantity_added'];
     $quantity_sold = (int)$stock_data['quantity_sold'];
     $quantity_adjusted = (int)$stock_data['quantity_adjusted'];
+    $quantity_adjusted_abs = abs($quantity_adjusted);
 
-    $stock_data['opening_quantity'] = $closing_quantity - ($quantity_added - $quantity_sold - $quantity_adjusted);
-    $stock_data['total_moved'] = $quantity_added + $quantity_sold + $quantity_adjusted;
+    $stock_data['opening_quantity'] = $closing_quantity - $quantity_added + $quantity_sold - $quantity_adjusted;
+    $stock_data['total_moved'] = $quantity_added + $quantity_sold + $quantity_adjusted_abs;
+    $stock_data['quantity_adjusted'] = $quantity_adjusted_abs;
     $response['stock_summary'] = $stock_data;
 } else {
         $response['stock_summary'] = ['opening_quantity' => 0, 'quantity_sold' => 0, 'quantity_added' => 0, 'quantity_adjusted' => 0, 'closing_quantity' => 0, 'total_moved' => 0];

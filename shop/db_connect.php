@@ -1,31 +1,10 @@
 <?php
 // db_connect.php
 
-// --- Database Configuration ---
-// These are your correct credentials. Do not change them.
-$db_host = 'srv582.hstgr.io';
-$db_name = 'u789944046_suppliesdirect';
-$db_user = 'u789944046_socrates';
-$db_pass = 'Naho1386';
-$db_port = 3306; // Default MySQL port
+require_once __DIR__ . '/config.php';
 
 // --- Create Connection ---
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name, $db_port);
-
-// --- Check Connection ---
-if ($conn->connect_error) {
-    die("Database Connection Failed: " . $conn->connect_error);
-}
-
-// Set charset to utf8mb4 for full Unicode support
-$conn->set_charset("utf8mb4");
-
-// =======================================================================
-// --- THIS IS THE NEW, REQUIRED LINE ---
-// It synchronizes the database session timezone with your application's timezone.
-// Replace 'Africa/Blantyre' with your actual server/business timezone if different.
-$conn->query("SET time_zone = '+02:00'");
-// =======================================================================
+$conn = getMySQLi();
 
 
 /**

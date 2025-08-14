@@ -16,15 +16,10 @@ if (!isset($_SESSION['shop_id']) || empty($_SESSION['shop_id'])) {
 
 $current_shop_id = (int)$_SESSION['shop_id'];
 
-// --- Database Connection (remains the same) ---
-$db_host = 'srv582.hstgr.io';
-$db_name = 'u789944046_suppliesdirect';
-$db_user = 'u789944046_socrates';
-$db_pass = 'Naho1386';
-
+// --- Database Connection ---
+require_once __DIR__ . '/config.php';
 try {
-    $pdo = new PDO("mysql:host=$db_host;dbname=$db_name;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo = getPDO();
 } catch (PDOException $e) {
     http_response_code(500);
     echo json_encode(['error' => 'Database connection failed.']);
